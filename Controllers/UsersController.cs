@@ -108,4 +108,72 @@ public class UsersController : ControllerBase
 
         return Ok(profile);
     }
+    
+    // Updates the authenticated user's profile.
+    [HttpPut("UpdateProfile")]
+    [Authorize]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDTO updateProfileDto)
+    {
+        // Validate incoming model
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+        
+        // Extract the user's email from the JWT claims.
+        var emailClaim = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email);
+
+        if (emailClaim == null)
+        {
+            return Unauthorized(new { message = "Invalid token: Email claim missing" });
+        }
+
+        string userEmail = emailClaim.Value;
+        
+        // Retrieve the user from the database.
+        var user = await _jwtDbContext.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == userEmail.ToLower());
+
+        if (user == null)
+        {
+            return NotFound(new { message = "User not found" });
+        }
+
+        if (!string.IsNullOrEmpty(updateProfileDto.FirstName))
+        {
+            user.FirstName = updateProfileDto.FirstName;
+        }
+
+        if (!string.IsNullOrEmpty(updateProfileDto.LastName))
+        {
+            user.LastName = updateProfileDto.LastName;
+        }
+
+        if (!string.IsNullOrEmpty(updateProfileDto.Email))
+        {
+            // Check if the new email is already taken by another user.
+            var emailExists = await _jwtDbContext.Users.AnyAsync(u => u.Email.ToLower() == updateProfileDto.Email.ToLower() && u.Id != user.Id);
+
+            if (emailExists)
+            {
+                return Conflict(new { message = "Email is already registered" });
+            }
+
+            user.Email = updateProfileDto.Email;
+        }
+
+        if (!string.IsNullOrEmpty(updateProfileDto.Password))
+        {
+            // Hash the new password before storing.
+            string hashedPassword = BCrypt.Net.BCrypt.HashPassword(updateProfileDto.Password);
+
+            user.Password = hashedPassword;
+        }
+        
+        // Save the changes to the database.
+        _jwtDbContext.Users.Update(user);
+        
+        await _jwtDbContext.SaveChangesAsync();
+        
+        return Ok(new { message = "Profile updated successfully" });
+    }
 }
