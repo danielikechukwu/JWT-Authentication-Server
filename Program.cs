@@ -1,44 +1,95 @@
+using JWTAuthenticationServer.Data;
+using JWTAuthenticationServer.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add controller services to the container and configure JSON serialization options
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    // Preserve property names as defined in the C# models (disable camelCase naming)
+    options.JsonSerializerOptions.PropertyNamingPolicy = null;
+});
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
+// Get Connection String
+var connectionString = builder.Configuration.GetConnectionString("JWTDbConnection");
+
+// Register DbContext with PostgreSQL
+builder.Services.AddDbContext<JWTDbContext>(options => options.UseNpgsql(connectionString));
+
+// Register the KeyRotationService as a hosted (background) service
+// This service handles periodic rotation of signing keys to enhance security
+builder.Services.AddHostedService<KeyRotationService>();
+
+// Configure Authentication using JWT Bearer tokens
+builder.Services.AddAuthentication(options =>
+{
+    // This indicates the authentication scheme that will be used by default when the app attempts to authenticate a user.
+    // Which authentication handler to use for verifying who the user is by default.
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+
+    // This indicates the authentication scheme that will be used by default when the app encounters an authentication challenge. 
+    // Which authentication handler to use for responding to failed authentication or authorization attempts.
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+}).AddJwtBearer(options =>
+    // Define token validation parameters to ensure tokens are valid and trustworthy
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true, // Ensure the token was issued by a trusted issuer
+        ValidIssuer = builder.Configuration["JwtIssuer"], // The expected issuer value from configuration
+        ValidateAudience = false, // Disable audience validation (can be enabled as needed)
+        ValidateLifetime = true, // Ensure the token has not expired
+        ValidateIssuerSigningKey = true, // Ensure the token's signing key is valid
+
+        // Define a custom IssuerSigningKeyResolver to dynamically retrieve signing keys from the JWKS endpoint
+        IssuerSigningKeyResolver = (token, securityToken, kid, parameters) =>
+        {
+            //Console.WriteLine($"Received Token: {token}");
+            //Console.WriteLine($"Token Issuer: {securityToken.Issuer}");
+            //Console.WriteLine($"Key ID: {kid}");
+            //Console.WriteLine($"Validate Lifetime: {parameters.ValidateLifetime}");
+
+            // Initialize an HttpClient instance for fetching the JWKS
+            var httpClient = new HttpClient();
+
+            // Synchronously fetch the JWKS (JSON Web Key Set) from the specified URL
+            var jwks = httpClient.GetStringAsync($"{builder.Configuration["Jwt:Issuer"]}/.well-known/jwks.json").Result;
+
+            // Parse the fetched JWKS into a JsonWebKeySet object
+            var keys = new JsonWebKeySet(jwks);
+
+            // Return the collection of JsonWebKey objects for token validation
+            return keys.Keys;
+        }
+    }
+);
+
+// Build the WebApplication instance based on the configured services and middleware
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+// Enable Scalar only in the development environment for API documentation and testing
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
 }
 
+// Enable Authentication middleware to process and validate incoming JWT tokens
+app.UseAuthentication();
+
+// Enable Authorization middleware to enforce access policies based on user roles and claims
+app.UseAuthorization();
+
+app.MapControllers();
+
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-    {
-        var forecast = Enumerable.Range(1, 5).Select(index =>
-                new WeatherForecast
-                (
-                    DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                    Random.Shared.Next(-20, 55),
-                    summaries[Random.Shared.Next(summaries.Length)]
-                ))
-            .ToArray();
-        return forecast;
-    })
-    .WithName("GetWeatherForecast");
-
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
