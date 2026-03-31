@@ -23,11 +23,11 @@ public class JWTDbContext : DbContext
         // Seed initial data for Roles, Users, Clients, and UserRoles.
         modelBuilder.Entity<Role>().HasData(
             new Role { Id = 1, Name = "Admin", Description = "Admin Role" },
-            new Role { Id = 2, Name = "Editor", Description = " Editor Role" },
+            new Role { Id = 2, Name = "Editor", Description = "Editor Role" },
             new Role { Id = 3, Name = "User", Description = "User Role" }
         );
 
-        modelBuilder.Entity<Role>().HasData(
+        modelBuilder.Entity<Client>().HasData(
             new Client
             {
                 Id = 1,

@@ -22,7 +22,10 @@ builder.Services.AddOpenApi();
 var connectionString = builder.Configuration.GetConnectionString("JWTDbConnection");
 
 // Register DbContext with PostgreSQL
-builder.Services.AddDbContext<JWTDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<JWTDbContext>(options =>
+{
+    options.UseNpgsql(connectionString).UseSnakeCaseNamingConvention();
+});
 
 // Register the KeyRotationService as a hosted (background) service
 // This service handles periodic rotation of signing keys to enhance security
@@ -78,8 +81,14 @@ var app = builder.Build();
 // Enable Scalar only in the development environment for API documentation and testing
 if (app.Environment.IsDevelopment())
 {
+    // Generates the openapi/v1.json endpoint
     app.MapOpenApi();
+    
+    // Configures the Scalar UI at /scalar/v1
     app.MapScalarApiReference();
+    
+    // Optional: Redirect the root "/" to Scalar for easier testing
+    app.MapGet("/", () => Results.Redirect("/scalar/v1"));
 }
 
 // Enable Authentication middleware to process and validate incoming JWT tokens
