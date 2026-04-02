@@ -12,10 +12,14 @@ namespace JWTAuthenticationServer.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly JWTDbContext _jwtDbContext;
+    
+    private readonly ILogger<UsersController> _logger;
 
-    public UsersController(JWTDbContext jwtDbContext)
+    public UsersController(JWTDbContext jwtDbContext, ILogger<UsersController> logger)
     {
         _jwtDbContext = jwtDbContext;
+        
+        _logger = logger;
     }
 
     // Register a new user
@@ -80,6 +84,8 @@ public class UsersController : ControllerBase
         // Extract the user email from the jwt claim
         var emailClaim = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email);
 
+        _logger.LogInformation($"Email Claim {emailClaim}");
+        
         if (emailClaim == null)
         {
             return Unauthorized(new { message = "Invalid Token: Email claim missing" });

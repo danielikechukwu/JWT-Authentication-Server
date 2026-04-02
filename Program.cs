@@ -46,7 +46,7 @@ builder.Services.AddAuthentication(options =>
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true, // Ensure the token was issued by a trusted issuer
-        ValidIssuer = builder.Configuration["JwtIssuer"], // The expected issuer value from configuration
+        ValidIssuer = builder.Configuration["Jwt:Issuer"], // The expected issuer value from configuration
         ValidateAudience = false, // Disable audience validation (can be enabled as needed)
         ValidateLifetime = true, // Ensure the token has not expired
         ValidateIssuerSigningKey = true, // Ensure the token's signing key is valid
@@ -54,20 +54,22 @@ builder.Services.AddAuthentication(options =>
         // Define a custom IssuerSigningKeyResolver to dynamically retrieve signing keys from the JWKS endpoint
         IssuerSigningKeyResolver = (token, securityToken, kid, parameters) =>
         {
-            //Console.WriteLine($"Received Token: {token}");
-            //Console.WriteLine($"Token Issuer: {securityToken.Issuer}");
-            //Console.WriteLine($"Key ID: {kid}");
-            //Console.WriteLine($"Validate Lifetime: {parameters.ValidateLifetime}");
+            Console.WriteLine($"Received Token: {token}");
+            Console.WriteLine($"Token Issuer: {securityToken.Issuer}");
+            Console.WriteLine($"Key ID: {kid}");
+            Console.WriteLine($"Validate Lifetime: {parameters.ValidateLifetime}");
+            Console.WriteLine($"Issuer: {builder.Configuration["Jwt:Issuer"]}");
+
 
             // Initialize an HttpClient instance for fetching the JWKS
             var httpClient = new HttpClient();
-
+            
             // Synchronously fetch the JWKS (JSON Web Key Set) from the specified URL
             var jwks = httpClient.GetStringAsync($"{builder.Configuration["Jwt:Issuer"]}/.well-known/jwks.json").Result;
-
+            
             // Parse the fetched JWKS into a JsonWebKeySet object
             var keys = new JsonWebKeySet(jwks);
-
+            
             // Return the collection of JsonWebKey objects for token validation
             return keys.Keys;
         }

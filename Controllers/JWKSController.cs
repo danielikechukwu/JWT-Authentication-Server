@@ -7,13 +7,15 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace JWTAuthenticationServer.Controllers;
 
+[Route(".well-known")]
+[ApiController]
 public class JWKSController : ControllerBase
 {
     // Private field to hold the database context
     private readonly JWTDbContext _jwtDbContext;
 
     // Constructor that injects the ApplicationDbContext via dependency injection
-    public JWKSController(JWTDbContext jwtDbContext)
+    public JWKSController(JWTDbContext jwtDbContext, ILogger<JWKSController> logger)
     {
         // Assign the injected ApplicationDbContext to the private field
         _jwtDbContext = jwtDbContext;
