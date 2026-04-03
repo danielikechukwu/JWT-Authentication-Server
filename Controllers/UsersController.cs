@@ -1,4 +1,5 @@
-﻿using JWTAuthenticationServer.Data;
+﻿using System.Security.Claims;
+using JWTAuthenticationServer.Data;
 using JWTAuthenticationServer.DTOs;
 using JWTAuthenticationServer.Models;
 using Microsoft.AspNetCore.Authorization;
