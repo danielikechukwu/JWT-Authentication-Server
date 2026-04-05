@@ -24,4 +24,6 @@ public class User
     
     public ICollection<UserRole> UserRoles { get; set; }
     
+    public  ICollection<RefreshToken> RefreshTokens { get; set; }
+    
 }

@@ -1,6 +1,7 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text;
 using JWTAuthenticationServer.Data;
 using JWTAuthenticationServer.DTOs;
 using JWTAuthenticationServer.Models;
@@ -74,7 +75,112 @@ public class AuthController : ControllerBase
         // At this point, authentication is successful. Proceed to generate a JWT token.
         var token = GenerateJwtToken(user, client);
 
-        return Ok(new { Token = token });
+        // Generate Refresh Token
+        var refreshToken = GenerateRefreshToken();
+
+        // Hash the refresh token before storing
+        var hashRefreshToken = HashToken(refreshToken);
+
+        // Create RefreshToken entity
+        var refreshTokenEntity = new RefreshToken()
+        {
+            Token = hashRefreshToken,
+            UserId = user.Id,
+            ClientId = client.Id,
+            //Refresh tokens are set to expire after 7 days (you can adjust this as needed).
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            CreatedAt = DateTime.UtcNow,
+            IsRevoked = false
+        };
+
+        // The hashed refresh token, along with associated user and client information, is stored in the RefreshTokens table.
+        _jwtDbContext.RefreshTokens.Add(refreshTokenEntity);
+        await _jwtDbContext.SaveChangesAsync();
+
+        // return Ok(new { Token = token });
+
+        // Return both tokens to the client
+        return Ok(new TokenResponseDTO()
+        {
+            Token = token,
+            RefreshToken = refreshToken,
+        });
+    }
+
+    [HttpPost("RefreshToken")]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDTO refreshTokenDto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+        
+        // Hash the incoming refresh token to compare with stored hash
+        var hashedToken = HashToken(refreshTokenDto.RefreshToken);
+        
+        // Check if the refresh token exists and matches the provided ClientId.
+        // Retrieve the refresh token from the database
+        var storedRefreshToken = await _jwtDbContext.RefreshTokens
+            .Include(rt => rt.User)
+            .ThenInclude(u => u.UserRoles)
+            .ThenInclude(ur => ur.Role)
+            .Include(rt => rt.Client)
+            .FirstOrDefaultAsync(rt => rt.Token == hashedToken && rt.Client.ClientId == refreshTokenDto.ClientId);
+
+        if (storedRefreshToken == null)
+        {
+            return Unauthorized("Invalid refresh token");
+        }
+        
+        // Ensure the token hasn't been revoked.
+        if (storedRefreshToken.IsRevoked)
+        {
+            return Unauthorized("Refresh token is revoked");
+        }
+        
+        // Ensure the token hasn't expired.
+        if (storedRefreshToken.ExpiresAt < DateTime.UtcNow)
+        {
+            return Unauthorized("Refresh token has expired");
+        }
+        
+        // Retrieve the user and client
+        var user = storedRefreshToken.User;
+        var client = storedRefreshToken.Client;
+        
+        // The existing refresh token is marked as revoked to prevent reuse.
+        storedRefreshToken.IsRevoked = true;
+        storedRefreshToken.RevokedAt = DateTime.UtcNow;
+        
+        // Generate a new refresh token
+        var newRefreshToken = GenerateRefreshToken();
+        var hashedNewRefreshToken = HashToken(newRefreshToken);
+
+        var newRefreshTokenEntity = new RefreshToken()
+        {
+            Token = newRefreshToken,
+            UserId = user.Id,
+            ClientId = client.Id,
+            ExpiresAt = DateTime.UtcNow.AddDays(7), // Adjust as needed
+            CreatedAt = DateTime.UtcNow,
+            IsRevoked = false
+        };
+        
+        // Store the new refresh token
+        _jwtDbContext.RefreshTokens.Add(newRefreshTokenEntity);
+        
+        // Generate new JWT access token
+        var newJwtToken = GenerateJwtToken(user, client);
+        
+        // Save changes to the database
+        await _jwtDbContext.SaveChangesAsync();
+        
+        // Return the new tokens to the client
+        return Ok(new TokenResponseDTO()
+        {
+            Token = newJwtToken,
+            RefreshToken = newRefreshToken,
+        });
     }
 
     // Private method responsible for generating a JWT token for an authenticated user
@@ -147,5 +253,28 @@ public class AuthController : ControllerBase
 
         // Return the serialized JWT token
         return token;
+    }
+    
+    // Helper method to generate a secure random refresh token
+    private string GenerateRefreshToken()
+    {
+        //A secure random string is generated using RandomNumberGenerator
+        var randomNumber = new byte[32];
+
+        using (var rng = RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(randomNumber);
+            return Convert.ToBase64String(randomNumber);
+        }
+    }
+    
+    // Helper method to hash tokens before storing them
+    private string HashToken(string token)
+    {
+        //The refresh token is hashed using SHA256 before storing it in the database to prevent token theft from compromising security.
+        using var sha256 = SHA256.Create();
+        
+        var hashedByte = sha256.ComputeHash(Encoding.UTF8.GetBytes(token));
+        return Convert.ToBase64String(hashedByte);
     }
 }

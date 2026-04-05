@@ -18,4 +18,6 @@ public class Client
     [Required]
     [MaxLength(100)]    
     public string ClientURL { get; set; }
+    
+    public ICollection<RefreshToken> RefreshTokens { get; set; }
 }
