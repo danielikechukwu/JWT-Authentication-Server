@@ -5,6 +5,7 @@ using System.Text;
 using JWTAuthenticationServer.Data;
 using JWTAuthenticationServer.DTOs;
 using JWTAuthenticationServer.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -114,10 +115,10 @@ public class AuthController : ControllerBase
         {
             return BadRequest(ModelState);
         }
-        
+
         // Hash the incoming refresh token to compare with stored hash
         var hashedToken = HashToken(refreshTokenDto.RefreshToken);
-        
+
         // Check if the refresh token exists and matches the provided ClientId.
         // Retrieve the refresh token from the database
         var storedRefreshToken = await _jwtDbContext.RefreshTokens
@@ -131,27 +132,27 @@ public class AuthController : ControllerBase
         {
             return Unauthorized("Invalid refresh token");
         }
-        
+
         // Ensure the token hasn't been revoked.
         if (storedRefreshToken.IsRevoked)
         {
             return Unauthorized("Refresh token is revoked");
         }
-        
+
         // Ensure the token hasn't expired.
         if (storedRefreshToken.ExpiresAt < DateTime.UtcNow)
         {
             return Unauthorized("Refresh token has expired");
         }
-        
+
         // Retrieve the user and client
         var user = storedRefreshToken.User;
         var client = storedRefreshToken.Client;
-        
+
         // The existing refresh token is marked as revoked to prevent reuse.
         storedRefreshToken.IsRevoked = true;
         storedRefreshToken.RevokedAt = DateTime.UtcNow;
-        
+
         // Generate a new refresh token
         var newRefreshToken = GenerateRefreshToken();
         var hashedNewRefreshToken = HashToken(newRefreshToken);
@@ -165,16 +166,16 @@ public class AuthController : ControllerBase
             CreatedAt = DateTime.UtcNow,
             IsRevoked = false
         };
-        
+
         // Store the new refresh token
         _jwtDbContext.RefreshTokens.Add(newRefreshTokenEntity);
-        
+
         // Generate new JWT access token
         var newJwtToken = GenerateJwtToken(user, client);
-        
+
         // Save changes to the database
         await _jwtDbContext.SaveChangesAsync();
-        
+
         // Return the new tokens to the client
         return Ok(new TokenResponseDTO()
         {
@@ -254,7 +255,86 @@ public class AuthController : ControllerBase
         // Return the serialized JWT token
         return token;
     }
-    
+
+    // Only authenticated users can access the Logout endpoint.
+    [Authorize]
+    public async Task<IActionResult> Logout([FromBody] LogoutRequestDTO logoutRequestDto)
+    {
+        //  Ensures that the incoming request contains both RefreshToken and ClientId.
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var claimUser = User;
+
+        // The user ID is extracted from the access token's claims to ensure that
+        // the refresh token being revoked belongs to the authenticated user.
+        var userClaimId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier);
+
+        if (userClaimId == null)
+        {
+            return Unauthorized("Invalid access token");
+        }
+
+        // Ensure that the refresh token being revoked belongs to the authenticated user.
+        if (!int.TryParse(userClaimId.Value, out int userId))
+        {
+            return Unauthorized("Invalid access token");
+        }
+
+        // Hash the incoming refresh token to compare with stored hash
+        var hashedToken = HashToken(logoutRequestDto.RefreshToken);
+
+        // The hashed token, ClientId and User Id are used to locate the corresponding RefreshToken entity in the database.
+        // Includes the User and Client entities for potential additional operations.
+        var storedRefreshToken = await _jwtDbContext.RefreshTokens
+            .Include(rt => rt.User)
+            .Include(rt => rt.Client)
+            .FirstOrDefaultAsync(rt =>
+                rt.Token == hashedToken && rt.Client.ClientId == logoutRequestDto.ClientId && rt.UserId == userId);
+
+        // Checks if the refresh token exists.
+        if (storedRefreshToken == null)
+        {
+            return Unauthorized("Invalid refresh token");
+        }
+
+        // Ensures the token hasn't already been revoked to prevent redundant operations.
+        if (storedRefreshToken.IsRevoked)
+        {
+            return BadRequest("Refresh token is already revoked");
+        }
+
+        // Revoke the refresh token
+        // Sets IsRevoked to true and updates the RevokedAt timestamp.
+        storedRefreshToken.IsRevoked = true;
+        storedRefreshToken.RevokedAt = DateTime.UtcNow;
+
+        if (logoutRequestDto.IsLogoutFromAllDevices)
+        {
+            // Revoke all refresh tokens for the user
+            // This is useful if you want to logout the user from all other devices.
+            var userRefreshToken = await _jwtDbContext.RefreshTokens
+                .Where(rt => rt.UserId == storedRefreshToken.UserId && !rt.IsRevoked)
+                .ToListAsync();
+
+            foreach (var token in userRefreshToken)
+            {
+                token.IsRevoked = true;
+                token.RevokedAt = DateTime.UtcNow;
+            }
+        }
+
+        // Persists the changes to the database.
+        await _jwtDbContext.SaveChangesAsync();
+
+        var currentClaimUser = User;
+
+        // Returns a success message upon successful revocation.
+        return Ok(new { Message = "Logout successful" });
+    }
+
     // Helper method to generate a secure random refresh token
     private string GenerateRefreshToken()
     {
@@ -267,13 +347,13 @@ public class AuthController : ControllerBase
             return Convert.ToBase64String(randomNumber);
         }
     }
-    
+
     // Helper method to hash tokens before storing them
     private string HashToken(string token)
     {
         //The refresh token is hashed using SHA256 before storing it in the database to prevent token theft from compromising security.
         using var sha256 = SHA256.Create();
-        
+
         var hashedByte = sha256.ComputeHash(Encoding.UTF8.GetBytes(token));
         return Convert.ToBase64String(hashedByte);
     }
