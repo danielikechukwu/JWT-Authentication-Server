@@ -158,7 +158,7 @@ public class AuthController : ControllerBase
 
         var newRefreshTokenEntity = new RefreshToken()
         {
-            Token = newRefreshToken,
+            Token = hashedNewRefreshToken,
             UserId = user.Id,
             ClientId = client.Id,
             ExpiresAt = DateTime.UtcNow.AddDays(7), // Adjust as needed

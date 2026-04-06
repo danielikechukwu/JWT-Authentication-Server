@@ -71,6 +71,60 @@ namespace JWTAuthenticationServer.Migrations
                         });
                 });
 
+            modelBuilder.Entity("JWTAuthenticationServer.Models.RefreshToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ClientId")
+                        .HasColumnType("integer")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<bool>("IsRevoked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_revoked");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("token");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_refresh_tokens");
+
+                    b.HasIndex("ClientId")
+                        .HasDatabaseName("ix_refresh_tokens_client_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_refresh_tokens_user_id");
+
+                    b.HasIndex(new[] { "Token" }, "IX_Unique_Token")
+                        .IsUnique()
+                        .HasDatabaseName("ix_refresh_tokens_token");
+
+                    b.ToTable("refresh_tokens", (string)null);
+                });
+
             modelBuilder.Entity("JWTAuthenticationServer.Models.Role", b =>
                 {
                     b.Property<int>("Id")
@@ -105,7 +159,7 @@ namespace JWTAuthenticationServer.Migrations
                         new
                         {
                             Id = 2,
-                            Description = " Editor Role",
+                            Description = "Editor Role",
                             Name = "Editor"
                         },
                         new
@@ -216,6 +270,27 @@ namespace JWTAuthenticationServer.Migrations
                     b.ToTable("user_roles", (string)null);
                 });
 
+            modelBuilder.Entity("JWTAuthenticationServer.Models.RefreshToken", b =>
+                {
+                    b.HasOne("JWTAuthenticationServer.Models.Client", "Client")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_tokens_clients_client_id");
+
+                    b.HasOne("JWTAuthenticationServer.Models.User", "User")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_tokens_users_user_id");
+
+                    b.Navigation("Client");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("JWTAuthenticationServer.Models.UserRole", b =>
                 {
                     b.HasOne("JWTAuthenticationServer.Models.Role", "Role")
@@ -237,6 +312,11 @@ namespace JWTAuthenticationServer.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("JWTAuthenticationServer.Models.Client", b =>
+                {
+                    b.Navigation("RefreshTokens");
+                });
+
             modelBuilder.Entity("JWTAuthenticationServer.Models.Role", b =>
                 {
                     b.Navigation("UserRoles");
@@ -244,6 +324,8 @@ namespace JWTAuthenticationServer.Migrations
 
             modelBuilder.Entity("JWTAuthenticationServer.Models.User", b =>
                 {
+                    b.Navigation("RefreshTokens");
+
                     b.Navigation("UserRoles");
                 });
 #pragma warning restore 612, 618
