@@ -59,8 +59,8 @@ public class UsersController : ControllerBase
 
         // Optionally, assign a default role to the new user.
         // For example, assign the "User" role.
-        var userRole = await _jwtDbContext.Roles.FirstOrDefaultAsync(r => r.Name == "User");
-
+        var userRole = await _jwtDbContext.Roles.FirstOrDefaultAsync(r => r.Name == "Admin");
+        
         if (userRole != null)
         {
             var newUserRole = new UserRole()
@@ -68,11 +68,30 @@ public class UsersController : ControllerBase
                 UserId = newUser.Id,
                 RoleId = userRole.Id
             };
-
+        
             await _jwtDbContext.UserRoles.AddAsync(newUserRole);
-
+        
             await _jwtDbContext.SaveChangesAsync();
         }
+        
+        // var roles = await _jwtDbContext.Roles.Where(r => r.Name == "User" || r.Name == "Admin").ToListAsync();
+        //
+        // if (roles.Any())
+        // {
+        //     foreach (var role in roles)
+        //     {
+        //         var newUserRole = new UserRole()
+        //         {
+        //             UserId = newUser.Id,
+        //             RoleId = role.Id
+        //         };
+        //
+        //         await _jwtDbContext.UserRoles.AddAsync(newUserRole);
+        //         
+        //         await _jwtDbContext.SaveChangesAsync();
+        //     }
+        //     
+        // }
 
         return CreatedAtAction(nameof(GetProfile), new { id = newUser.Id },
             new { message = "User registered successfully" });

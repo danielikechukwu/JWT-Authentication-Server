@@ -63,18 +63,40 @@ builder.Services.AddAuthentication(options =>
 
             // Initialize an HttpClient instance for fetching the JWKS
             var httpClient = new HttpClient();
-            
+
             // Synchronously fetch the JWKS (JSON Web Key Set) from the specified URL
             var jwks = httpClient.GetStringAsync($"{builder.Configuration["Jwt:Issuer"]}/.well-known/jwks.json").Result;
-            
+
             // Parse the fetched JWKS into a JsonWebKeySet object
             var keys = new JsonWebKeySet(jwks);
-            
+
             // Return the collection of JsonWebKey objects for token validation
             return keys.Keys;
         }
     }
 );
+
+// Define Authorization Policies
+builder.Services.AddAuthorization(options =>
+{
+    // Scenario 1: Only authenticate (no specific role)
+    // This policy simply requires the user to be authenticated
+    options.AddPolicy("AuthenticatedUser", policy => { policy.RequireAuthenticatedUser(); });
+
+    // Scenario 2: Require Admin role
+    options.AddPolicy("AdminOnly", policy => { policy.RequireRole("Admin"); });
+
+    // Scenario 3: Require User role
+    options.AddPolicy("UserOnly", policy => { policy.RequireRole("User"); });
+
+    // Scenario 4: Require either Admin OR User role
+    // With RequireRole, listing multiple roles is an OR condition
+    options.AddPolicy("AdminOrUser", policy => { policy.RequireRole("Admin", "User"); });
+
+    // Scenario 5:  Authorize with Both Admin and User Roles
+    // Multiple RequireRole calls within a policy are treated as AND conditions
+    options.AddPolicy("AdminAndUser", policy => { policy.RequireRole("Admin").RequireRole("User"); });
+});
 
 // Build the WebApplication instance based on the configured services and middleware
 var app = builder.Build();
@@ -85,10 +107,10 @@ if (app.Environment.IsDevelopment())
 {
     // Generates the openapi/v1.json endpoint
     app.MapOpenApi();
-    
+
     // Configures the Scalar UI at /scalar/v1
     app.MapScalarApiReference();
-    
+
     // Optional: Redirect the root "/" to Scalar for easier testing
     app.MapGet("/", () => Results.Redirect("/scalar/v1"));
 }

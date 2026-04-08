@@ -257,6 +257,7 @@ public class AuthController : ControllerBase
     }
 
     // Only authenticated users can access the Logout endpoint.
+    [HttpPost("Logout")]
     [Authorize]
     public async Task<IActionResult> Logout([FromBody] LogoutRequestDTO logoutRequestDto)
     {

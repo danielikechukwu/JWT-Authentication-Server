@@ -20,6 +20,7 @@ public class ProductsController : ControllerBase
     private static int _nextId = 4; // To auto increment product id.
     
     // Retrieve all products
+    [Authorize]
     [HttpGet("GetAllProducts")]
     public ActionResult<IEnumerable<Product>> GetAllProducts()
     {
@@ -27,6 +28,7 @@ public class ProductsController : ControllerBase
     }
     
     // Retrieves a specific product by ID.
+    [Authorize(Roles = "Admin")]
     [HttpGet("GetProductById/{id}",  Name = "GetProductById")]
     public ActionResult<Product> GetProductById(int id)
     {
@@ -41,6 +43,7 @@ public class ProductsController : ControllerBase
     }
     
     // Create new product
+    [Authorize(Roles = "User")]
     [HttpPost("AddProduct")]
     public ActionResult<Product> AddProduct([FromBody] Product product)
     {
@@ -54,6 +57,10 @@ public class ProductsController : ControllerBase
         return CreatedAtRoute("GetProductById", new { id = product.Id },  product);
     }
 
+    // Authorize with either "Admin" AND "User" Roles
+    // Specifying multiple roles in [Authorize(Roles = "Admin,User")]
+    // means the user must be in EITHER the "Admin" OR the "User" role (logical OR).
+    [Authorize(Roles = "Admin,User")]
     [HttpPut("UpdateProduct")]
     public IActionResult UpdateProduct(int id, [FromBody] Product product)
     {
@@ -76,6 +83,11 @@ public class ProductsController : ControllerBase
         return NoContent();
     }
 
+    // Authorize with both Admin or User Role
+    // There are two separate [Authorize] attributes with "Admin" and "User" roles which means
+    // that users having both roles can access this endpoint.
+    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "User")]
     [HttpDelete("DeleteProduct/{id}")]
     public IActionResult DeleteProduct(int id)
     {
